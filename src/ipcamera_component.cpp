@@ -24,7 +24,7 @@ namespace ros2_ipcamera
 {
   IpCamera::IpCamera(const std::string & node_name, const rclcpp::NodeOptions & options)
   : Node(node_name, options),
-    qos_(rclcpp::QoS(rclcpp::KeepLast(1)).best_effort())
+    qos_(rclcpp::SensorDataQoS{})
   {
     RCLCPP_INFO(this->get_logger(), "namespace: %s", this->get_namespace());
     RCLCPP_INFO(this->get_logger(), "name: %s", this->get_name());
@@ -40,8 +40,7 @@ namespace ros2_ipcamera
     // Set up publishers.
     this->pub_ = image_transport::create_camera_publisher(
       this, "~/image_raw", qos_.get_rmw_qos_profile());
-
-    this->execute();
+    this->timer_ = this->create_wall_timer(period_, std::bind(&IpCamera::execute, this));
   }
 
   IpCamera::IpCamera(const rclcpp::NodeOptions & options)
@@ -124,31 +123,22 @@ namespace ros2_ipcamera
   void
   IpCamera::execute()
   {
-    rclcpp::Rate loop_rate(freq_);
-
-    auto camera_info_msg = std::make_shared<sensor_msgs::msg::CameraInfo>(cinfo_manager_->getCameraInfo());
-
     // Initialize OpenCV image matrices.
     cv::Mat frame;
 
-    size_t frame_id = 0;
-    // Our main event loop will spin until the user presses CTRL-C to exit.
-    while (rclcpp::ok()) {
-      // Initialize a shared pointer to an Image message.
-      auto msg = std::make_unique<sensor_msgs::msg::Image>();
-      msg->is_bigendian = false;
+    // Initialize a shared pointer to an Image message.
+    auto camera_info_msg = std::make_shared<sensor_msgs::msg::CameraInfo>(cinfo_manager_->getCameraInfo());
+    auto msg = std::make_unique<sensor_msgs::msg::Image>();
+    msg->is_bigendian = false;
 
-      // Get the frame from the video capture.
-      this->cap_ >> frame;
-      // Check if the frame was grabbed correctly
-      if (!frame.empty()) {
-        // Convert to a ROS image
-        convert_frame_to_message(frame, frame_id, *msg, *camera_info_msg);
-        // Publish the image message and increment the frame_id.
-        this->pub_.publish(std::move(msg), camera_info_msg);
-        ++frame_id;
-      }
-      loop_rate.sleep();
+    // Get the frame from the video capture.
+    this->cap_ >> frame;
+    // Check if the frame was grabbed correctly
+    if (!frame.empty()) {
+      // Convert to a ROS image
+      convert_frame_to_message(frame, 0, *msg, *camera_info_msg);
+      // Publish the image message and increment the frame_id.
+      this->pub_.publish(std::move(msg), camera_info_msg);
     }
   }
 
@@ -189,7 +179,7 @@ namespace ros2_ipcamera
 
     msg.header.frame_id = std::to_string(frame_id);
     msg.header.stamp = timestamp;
-    camera_info_msg.header.frame_id = std::to_string(frame_id);
+    camera_info_msg.header.frame_id = "ipcamera"; //FIXME: Get frame_id from parameter
     camera_info_msg.header.stamp = timestamp;
   }
 }

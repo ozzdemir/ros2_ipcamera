@@ -71,10 +71,11 @@ namespace ros2_ipcamera
   private:
     std::shared_ptr<camera_info_manager::CameraInfoManager> cinfo_manager_;
     std::string camera_calibration_file_param_;
+    rclcpp::TimerBase::SharedPtr timer_;
 
     image_transport::CameraPublisher pub_;
     rclcpp::QoS qos_;
-    std::chrono::milliseconds freq_ = 30ms;
+    std::chrono::milliseconds period_ = 30ms;
 
     cv::VideoCapture cap_;
     std::string source_;
