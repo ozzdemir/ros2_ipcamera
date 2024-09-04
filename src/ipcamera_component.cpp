@@ -123,6 +123,8 @@ namespace ros2_ipcamera
   void
   IpCamera::execute()
   {
+    static int empty_frame_counter = 0;
+    const int empty_frame_threshold = 10;
     // Initialize OpenCV image matrices.
     cv::Mat frame;
 
@@ -139,6 +141,21 @@ namespace ros2_ipcamera
       convert_frame_to_message(frame, 0, *msg, *camera_info_msg);
       // Publish the image message and increment the frame_id.
       this->pub_.publish(std::move(msg), camera_info_msg);
+      empty_frame_counter = 0;
+    }
+    else {
+      empty_frame_counter++;
+      if (empty_frame_counter >= empty_frame_threshold) {
+        RCLCPP_ERROR(this->get_logger(),"Connection to camera is dropped, trying to re-connect");
+        this->cap_.release();
+        this->cap_.open(source_);
+        while (!this->cap_.isOpened()) {
+          RCLCPP_ERROR(this->get_logger(), "Could not open video stream");
+          std::this_thread::sleep_for(std::chrono::milliseconds(500));
+          this->cap_.open(source_);
+        }
+        RCLCPP_INFO(this->get_logger(), "Succesfully reconnected to the RTSP stream.");
+      }
     }
   }
 
